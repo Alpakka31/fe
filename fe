@@ -6,6 +6,7 @@ import sys
 import requests
 import re
 import signal
+import time
 
 # Check for Ctrl+C interrupt
 def handleInterrupt(signalNum, frame):
@@ -55,6 +56,12 @@ def getFileSizeType(data_size):
 
     return size_type
 
+def calculateDownloadSpeed(dload):
+    # Calculate download speed in Megabits
+    dload_speed = ((dload / 1024) / 1024)
+
+    return dload_speed
+
 # URL fetcher
 def fetchURL(urls):
     for i in urls:
@@ -81,6 +88,8 @@ def fetchURL(urls):
             # Save to file and check possible exceptions
             try:
                 with open(fileName[-1], "wb") as f:
+                    start = time.perf_counter()
+
                     # if 'content-length' is not provided
                     if length is None:
                         f.write(res.content)
@@ -98,22 +107,30 @@ def fetchURL(urls):
                             # Gigabits
                             if url_dload_size == "GiB":
                                 done = (((dl / 1024) / 1024) / 1024)
-                                sys.stdout.write("\r(%.2f/%.2f) %s" % (done, total_size, url_dload_size))
+                                speed = calculateDownloadSpeed(dl // (time.perf_counter() - start))
+
+                                sys.stdout.write("\r(%.2f/%.2f) %s | %.2f MiB/s" % (done, total_size, url_dload_size, speed))
                                 sys.stdout.flush()
                             # Megabits
                             elif url_dload_size == "MiB":
                                 done = ((dl / 1024) / 1024)
-                                sys.stdout.write("\r(%.2f/%.2f) %s" % (done, total_size, url_dload_size))
+                                speed = calculateDownloadSpeed(dl // (time.perf_counter() - start))
+
+                                sys.stdout.write("\r(%.2f/%.2f) %s | %.2f MiB/s" % (done, total_size, url_dload_size, speed))
                                 sys.stdout.flush()
                             # Kilobits
                             elif url_dload_size == "KiB":
                                 done = (dl / 1024)
-                                sys.stdout.write("\r(%.2f/%.2f) %s" % (done, total_size, url_dload_size))
+                                speed = calculateDownloadSpeed(dl // (time.perf_counter() - start))
+
+                                sys.stdout.write("\r(%.2f/%.2f) %s | %.2f MiB/s" % (done, total_size, url_dload_size, speed))
                                 sys.stdout.flush()
                             # Bits
                             elif url_dload_size == "Bits":
                                 done = dl
-                                sys.stdout.write("\r(%.2f/%.2f) %s" % (done, total_size, url_dload_size))
+                                speed = calculateDownloadSpeed(dl // (time.perf_counter() - start))
+
+                                sys.stdout.write("\r(%.2f/%.2f) %s | %.2f MiB/s" % (done, total_size, url_dload_size, speed))
                                 sys.stdout.flush()
 
             except PermissionError:
