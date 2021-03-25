@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+# A very simple file downloader written in Python 3
+
+# Imports
+import sys
+import requests
+import re
+import signal
+
+# Check for Ctrl+C interrupt
+def handleInterrupt(signalNum, frame):
+    print("\nInterrupted")
+    sys.exit(1)
+
+# Validate the URL protocol
+def isValidURL(url):
+    # Check for http/https protocol
+    res = re.search("^http[s]?://", url)
+    if res == None:
+        return False
+    else:
+        return True
+
+# Calculate the correct file download size
+def calculateTotalSize(url_length):
+    # convert bits to gigabits
+    if url_length >= 1073741824:
+        total_length = (((url_length / 1024)) / 1024) / 1024
+    # convert bits to megabits
+    elif url_length >= 1048576:
+        total_length = ((url_length / 1024) / 1024)
+    # convert bits to kilobits
+    elif url_length >= 1024:
+        total_length = url_length / 1024
+    # bits
+    else:
+        total_length = url_length
+
+    return total_length
+
+# Get the file size type of the download file
+def getFileSizeType(data_size):
+    # gigabits
+    if data_size >= 1073741824:
+        size_type = "GiB"
+    # megabits
+    elif data_size >= 1048576:
+        size_type = "MiB"
+    # kilobits
+    elif data_size >= 1024:
+        size_type = "KiB"
+    # bits
+    else:
+        size_type = "Bits"
+
+    return size_type
+
+# URL fetcher
+def fetchURL(urls):
+    for i in urls:
+        # Check for response errors
+        try:
+            res =  requests.get(i, stream=True)
+        except requests.ConnectionError as err:
+            print("Connection error: " + str(err))
+            sys.exit(1)
+        except requests.Timeout as err:
+            print("Connection timed out: " + str(err))
+            sys.exit(1)
+        except requests.RequestException as err:
+            print("Error occured: " + str(err))
+            sys.exit(1)
+
+        # Extract the filename from the url name
+        fileName = i.split("/")
+        print("Fetching: " + fileName[-1])
+
+        if res.ok:
+            length = res.headers.get('content-length')
+
+            # Save to file and check possible exceptions
+            try:
+                with open(fileName[-1], "wb") as f:
+                    # if 'content-length' is not provided
+                    if length is None:
+                        f.write(res.content)
+                        print("(unknown size)")
+                    else:
+                        # Download the file with progress
+                        dl = 0
+                        for data in res.iter_content(chunk_size=4096):
+                            dl += len(data)
+                            f.write(data)
+
+                            total_size = calculateTotalSize(int(length))
+                            url_dload_size = getFileSizeType(int(length))
+
+                            # Gigabits
+                            if url_dload_size == "GiB":
+                                done = (((dl / 1024) / 1024) / 1024)
+                                sys.stdout.write("\r(%.2f/%.2f) %s" % (done, total_size, url_dload_size))
+                                sys.stdout.flush()
+                            # Megabits
+                            elif url_dload_size == "MiB":
+                                done = ((dl / 1024) / 1024)
+                                sys.stdout.write("\r(%.2f/%.2f) %s" % (done, total_size, url_dload_size))
+                                sys.stdout.flush()
+                            # Kilobits
+                            elif url_dload_size == "KiB":
+                                done = (dl / 1024)
+                                sys.stdout.write("\r(%.2f/%.2f) %s" % (done, total_size, url_dload_size))
+                                sys.stdout.flush()
+                            # Bits
+                            elif url_dload_size == "Bits":
+                                done = dl
+                                sys.stdout.write("\r(%.2f/%.2f) %s" % (done, total_size, url_dload_size))
+                                sys.stdout.flush()
+
+            except PermissionError:
+                print("Can't create a file. Permission denied.")
+                sys.exit(1)
+
+            print()
+            print("Fetched: " + fileName[-1])
+
+        else:
+            # Tell the error returned by the URL if something went wrong
+            print("URL returned: " + str(res.status_code))
+
+def parseCLIArguments():
+    args = sys.argv[1:]
+    for i in args:
+        valid = isValidURL(i)
+        if valid == False:
+            protocol_name = i.split(":")
+            print("Invalid protocol: " + protocol_name[0])
+            sys.exit(1)
+
+    return args
+
+def main():
+    arguments = parseCLIArguments()
+    if len(arguments) == 0:
+        print("Nothing to fetch")
+        print("Usage: fe <url> <url> <url>")
+        sys.exit(1)
+
+    fetchURL(arguments)
+
+
+if __name__ == "__main__":
+    # Initialize interrupt signal
+    signal.signal(signal.SIGINT, handleInterrupt)
+    main()
