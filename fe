@@ -1,181 +1,142 @@
 #!/usr/bin/env python3
-# A very simple file downloader written in Python 3
+import sys, os, signal, time
+from ftplib import FTP
 
-# Imports
-import sys
-import requests
-import re
-import signal
-import time
-
-# Check for Ctrl+C interrupt
-def handleInterrupt(signalNum, frame):
-    print("\nInterrupted")
+try:
+    from progressbar import AnimatedMarker, Bar, BouncingBar, Counter, ETA, \
+    AdaptiveETA, FileTransferSpeed, FormatLabel, Percentage, \
+    ProgressBar, ReverseBar, RotatingMarker, \
+    SimpleProgress, Timer, UnknownLength
+except ImportError:
+    print("progressbar2 module is not installed")
     sys.exit(1)
 
-# Validate the URL protocol
-def isValidURL(url):
-    # Check for http/https protocol
-    res = re.search("^http[s]?://", url)
-    if res == None:
-        return False
-    else:
-        return True
+try:
+    import requests
+    from requests import exceptions
+except ImportError:
+    print("requests module is not installed")
+    sys.exit(1)
 
-# Calculate the correct file download size
-def calculateTotalSize(url_length):
-    # convert bits to gigabits
-    if url_length >= 1073741824:
-        total_length = (((url_length / 1024)) / 1024) / 1024
-    # convert bits to megabits
-    elif url_length >= 1048576:
-        total_length = ((url_length / 1024) / 1024)
-    # convert bits to kilobits
-    elif url_length >= 1024:
-        total_length = url_length / 1024
-    # bits
-    else:
-        total_length = url_length
+try:
+    from tqdm import tqdm
+except ImportError:
+    print("tqdm module is not installed")
+    sys.exit(1)
 
-    return total_length
+def handleInterrupt(signalNumber, frame):
+    print("Download interrupted")
+    sys.exit(1)
 
-# Get the file size type of the download file
-def getFileSizeType(data_size):
-    # gigabits
-    if data_size >= 1073741824:
-        size_type = "GiB"
-    # megabits
-    elif data_size >= 1048576:
-        size_type = "MiB"
-    # kilobits
-    elif data_size >= 1024:
-        size_type = "KiB"
-    # bits
-    else:
-        size_type = "Bits"
-
-    return size_type
-
-def calculateDownloadSpeed(dload):
-    # Calculate download speed in Megabits
-    if dload >= 1073741824:
-        dload_speed = ((dload / 1024) / 1024) / 1024
-        dload_size = "GiB/s"
-    elif dload >= 1048576:
-        dload_speed = ((dload / 1024) / 1024)
-        dload_size = "MiB/s"
-    elif dload >= 1024:
-        dload_speed = dload / 1024
-        dload_size = "KiB/s"
-    else:
-        dload_speed = dload
-        dload_size = "Bits/s"
-    return [dload_speed, dload_size]
-
-# URL fetcher
-def fetchURL(urls):
-    for i in urls:
-        # Check for response errors
-        try:
-            res =  requests.get(i, stream=True)
-        except requests.ConnectionError as err:
-            print("Connection error: " + str(err))
-            sys.exit(1)
-        except requests.Timeout as err:
-            print("Connection timed out: " + str(err))
-            sys.exit(1)
-        except requests.RequestException as err:
-            print("Error occured: " + str(err))
-            sys.exit(1)
-
-        # Extract the filename from the url name
-        fileName = i.split("/")
-        print("Fetching: " + fileName[-1])
-
-        if res.ok:
-            length = res.headers.get('content-length')
-
-            # Save to file and check possible exceptions
-            try:
-                with open(fileName[-1], "wb") as f:
-                    start = time.perf_counter()
-
-                    # if 'content-length' is not provided
-                    if length is None:
-                        f.write(res.content)
-                        print("(unknown size)")
-                    else:
-                        # Download the file with progress
-                        dl = 0
-                        for data in res.iter_content(chunk_size=4096):
-                            dl += len(data)
-                            f.write(data)
-
-                            total_size = calculateTotalSize(int(length))
-                            url_dload_size = getFileSizeType(int(length))
-
-                            # Gigabits
-                            if url_dload_size == "GiB":
-                                done = (((dl / 1024) / 1024) / 1024)
-                                speed = calculateDownloadSpeed(dl // (time.perf_counter() - start))
-
-                                sys.stdout.write("\r(%.2f/%.2f) %s | %.2f %s" % (done, total_size, url_dload_size, speed[0], speed[1]))
-                                sys.stdout.flush()
-                            # Megabits
-                            elif url_dload_size == "MiB":
-                                done = ((dl / 1024) / 1024)
-                                speed = calculateDownloadSpeed(dl // (time.perf_counter() - start))
-
-                                sys.stdout.write("\r(%.2f/%.2f) %s | %.2f %s" % (done, total_size, url_dload_size, speed[0], speed[1]))
-                                sys.stdout.flush()
-                            # Kilobits
-                            elif url_dload_size == "KiB":
-                                done = (dl / 1024)
-                                speed = calculateDownloadSpeed(dl // (time.perf_counter() - start))
-
-                                sys.stdout.write("\r(%.2f/%.2f) %s | %.2f %s" % (done, total_size, url_dload_size, speed[0], speed[1]))
-                                sys.stdout.flush()
-                            # Bits
-                            elif url_dload_size == "Bits":
-                                done = dl
-                                speed = calculateDownloadSpeed(dl // (time.perf_counter() - start))
-
-                                sys.stdout.write("\r(%.2f/%.2f) %s | %.2f %s" % (done, total_size, url_dload_size, speed[0], speed[1]))
-                                sys.stdout.flush()
-
-            except PermissionError:
-                print("Can't create a file. Permission denied.")
-                sys.exit(1)
-
-            print()
-            print("Fetched: " + fileName[-1])
-
-        else:
-            # Tell the error returned by the URL if something went wrong
-            print("URL returned: " + str(res.status_code))
-
-def parseCLIArguments():
-    args = sys.argv[1:]
-    for i in args:
-        valid = isValidURL(i)
-        if valid == False:
-            protocol_name = i.split(":")
-            print("Invalid protocol: " + protocol_name[0])
-            sys.exit(1)
-
-    return args
-
-def main():
-    arguments = parseCLIArguments()
-    if len(arguments) == 0:
-        print("Nothing to fetch")
-        print("Usage: fe <url> <url> <url>")
+def fetch_file(url, destdir):
+    filename = url.split('/')[-1]
+    try:
+        resp = requests.get(url, stream=True)
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        print(e)
+        sys.exit(1)
+    except requests.exceptions.RequestException as e:
+        print("Error downloading file: " + e)
         sys.exit(1)
 
-    fetchURL(arguments)
+    length = int(resp.headers.get('content-length', 0))
+    with open(destdir + "/" + filename, 'wb') as f, tqdm(
+        desc=filename,
+        total=length,
+        unit='iB',
+        unit_scale=True,
+        unit_divisor=1024,
+    ) as bar:
+        for chunk in resp.iter_content(chunk_size=8192):
+            size = f.write(chunk)
+            bar.update(size)
 
+
+def fetch_file_ftp(url, destdir):
+    domain = url.split('/')[2]
+    filename = url.split('/')[-1]
+    try:
+        ftp = FTP(domain)
+    except ftplib.all_errors as e:
+        print("FTP error: " + e)
+        sys.exit(1)
+
+    ftp.login('anonymous', 'anonymous')
+
+    widgets = ['Downloading: ' + filename + ' ', Percentage(), ' ', Bar(marker='#', \
+            left='[',right=']'), ' ', ETA(), ' ', FileTransferSpeed()]
+
+    ftpFilepath = url.split('/')[3:-1]
+    ftpFilepath = '/'.join(ftpFilepath)
+
+    ftp.cwd(ftpFilepath)
+
+    files = ftp.nlst()
+
+    for file in files:
+        if file == filename:
+            ftp.sendcmd("TYPE i")
+            size = ftp.size(file)
+            
+            global pbar
+            pbar = ProgressBar(widgets = widgets, maxval = size)
+            pbar.start()
+
+            fetched_file = open(destdir + "/" + file, 'wb')
+            
+            def file_write(data):
+                fetched_file.write(data)
+                global pbar
+                pbar += len(data)
+
+            ftp.retrbinary('RETR ' + file, file_write)
+            pbar.finish()
+            fetched_file.close()
+
+    ftp.quit()
+
+
+def validate_url(url):
+    if "http://" in url:
+        return True
+    elif "https://" in url:
+        return True
+    elif "ftp://" in url:
+        return True
+    else:
+        return False
+
+def isFTP(url):
+    if "ftp://" in url:
+        return True
+    else:
+        return False
+
+def validate_destdir(destdir):
+    if not os.path.isdir(destdir):
+        os.makedirs(destdir, 0o755)
+
+def main():
+    if len(sys.argv) < 3:
+        print("Not enough arguments... [url] [destdir]")
+        sys.exit(1)
+    elif len(sys.argv) > 3:
+        print("Too many arguments. Only 2 needed.")
+        sys.exit(1)
+    else:
+        isValid = validate_url(sys.argv[1])
+        if isValid == True:
+            validate_destdir(sys.argv[2])
+            
+            isFTPurl = isFTP(sys.argv[1])
+            if isFTPurl == True:
+                fetch_file_ftp(sys.argv[1], sys.argv[2])
+            elif isFTPurl == False:
+                fetch_file(sys.argv[1], sys.argv[2])
+        elif isValid == False:
+            print("URL validation failed.. Is it a real URL?")
 
 if __name__ == "__main__":
-    # Initialize interrupt signal
     signal.signal(signal.SIGINT, handleInterrupt)
     main()
