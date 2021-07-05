@@ -64,8 +64,8 @@ def fetch_file_ftp(url, destdir):
 
     ftp.login('anonymous', 'anonymous')
 
-    widgets = ['Downloading: ' + filename + ' ', Percentage(), ' ', Bar(marker='#', \
-            left='[',right=']'), ' ', ETA(), ' ', FileTransferSpeed()]
+    widgets = [filename + ': ', Percentage(), ' ', Bar(marker='\u2588', \
+            left='|',right='|'), ' ', ETA(), ' ', FileTransferSpeed()]
 
     ftpFilepath = url.split('/')[3:-1]
     ftpFilepath = '/'.join(ftpFilepath)
